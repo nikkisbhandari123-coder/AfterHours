@@ -13,6 +13,7 @@ AfterHours/
 ├── app.py            # Streamlit web interface, CRT monitor & analog tuner console
 ├── story.py          # Narrative logic, frequency spectrum telemetry, lore & clues
 ├── ai_engine.py      # AI persona engine & radio transmission generator
+├── audio_manager.py  # Atmospheric radio audio synthesizer & ElevenLabs voice narration
 ├── requirements.txt  # Project dependencies (streamlit, python-dotenv)
 ├── README.md         # Documentation & guide
 └── .gitignore        # Git ignore rules for Python & Streamlit
@@ -28,6 +29,7 @@ AfterHours/
    - Dynamic 5-segment LED signal strength meter reflecting proximity to station carrier waves.
    - Vintage CRT monitor with scanlines, timestamp telemetry, and escaping to ensure clean text display without literal HTML leaks.
    - Investigation evidence notebook recording discovered clues, source frequencies, timestamps, and highlighting new entries.
+   - Integrated Receiver Acoustic Monitor & Mixer with master mute switch, volume attenuation, and broadcast narration controls.
 
 2. **[story.py](file:///c:/Users/nikki/AfterHours/story.py) (Narrative & Frequency Telemetry)**:
    - Houses known radio stations:
@@ -49,11 +51,18 @@ AfterHours/
    - **Strict Story Protection**: All 4 canonical mystery broadcasts, clues, frequency locks, and branching endings are 100% Python-controlled and can never be altered or overwritten by AI.
    - **Zero-Freeze Caching**: Slider sweeping remains instant (0ms) using in-memory response caching and instant deterministic Python audio fallbacks if Ollama is offline or times out.
 
-4. **[requirements.txt](file:///c:/Users/nikki/AfterHours/requirements.txt)**:
-   - Defines dependencies (`streamlit`, `python-dotenv`). No external heavyweight ML libraries required.
+4. **[audio_manager.py](file:///c:/Users/nikki/AfterHours/audio_manager.py) (Atmospheric Radio Audio System)**:
+   - Zero-dependency audio synthesis using standard library `wave` and `struct` producing 16-bit 22,050Hz mono audio.
+   - Procedural sound generation for dead air white noise, 60Hz transformer hum, heterodyne fringe interference, short carrier-lock confirmation chimes, and dial-sweep clicks.
+   - Procedural radio station signatures for all 4 canonical stations (NOAA alert tone, EAS dual-tone siren, police repeater squelch bursts, and phantom music box chimes).
+   - Optional ElevenLabs Voice Narration integration using `ELEVENLABS_API_KEY` with local disk caching (`assets/audio/narration/`).
+   - Pure Python PCM volume attenuation scaling supporting Master, RF Static, and Narration levels without audio clipping.
 
-5. **[.gitignore](file:///c:/Users/nikki/AfterHours/.gitignore)**:
-   - Excludes Python bytecode, virtual environments, and scratch tests from Git.
+5. **[requirements.txt](file:///c:/Users/nikki/AfterHours/requirements.txt)**:
+   - Defines dependencies (`streamlit`, `python-dotenv`). No external heavyweight ML or audio libraries required.
+
+6. **[.gitignore](file:///c:/Users/nikki/AfterHours/.gitignore)**:
+   - Excludes Python bytecode, virtual environments, audio cache artifacts, and scratch tests from Git.
 
 ---
 
@@ -87,6 +96,57 @@ $env:OLLAMA_TIMEOUT = "25.0"
 
 ### 3. Graceful Offline Fallback
 If Ollama is not running or if a generation request times out, the game **continues to work seamlessly** using its built-in procedural Python radio audio synthesizer without freezing the interface. The receiver status bar displays `AI: STANDBY (FALLBACK)` and all canonical broadcasts remain 100% playable.
+
+---
+
+## 🔊 Atmospheric Radio Audio System
+
+AfterHours includes a dedicated, hardware-inspired acoustic subsystem modeled after vintage vacuum-tube shortwave receivers.
+
+### 1. Procedural Radio Sound Effects
+- **Dead Air Static**: Authentic white noise with subtle 60Hz/120Hz alternating-current power transformer hum on unallocated frequencies.
+- **Heterodyne Fringe Interference**: Dynamic beat frequencies, carrier drift, and squelch flutter that intensify as you approach an active station.
+- **Carrier Lock Confirmation**: A resonant dual-tone carrier acknowledgment ping (0.8s) when successfully locking an authentic broadcast.
+- **Analog Dial Sweeps**: Subtle tuning clicks and tube reactance when turning the dial across the dial face.
+- **Station Audio Signatures**: Custom vintage procedural beacons for all four stations when locked:
+  - `88.1 MHz`: Automated NOAA Weather alert tone (1050 Hz) and robotic teletype pulse.
+  - `91.7 MHz`: Civil Defense dual-tone EAS siren (853 Hz + 960 Hz emergency alert).
+  - `103.4 MHz`: Sheriff repeater roger beep and squelch burst.
+  - `107.9 MHz`: Phantom carrier wave with eerie, resonant music box chimes.
+
+### 2. Broadcast Voice Narration (ElevenLabs TTS Integration)
+Players can listen to spoken broadcasts for all four canonical transmissions:
+- **88.1 MHz**: *K-MIST Automated Weather Broadcast*
+- **91.7 MHz**: *Civil Defense Evacuation Advisory*
+- **103.4 MHz**: *Blackwood Sheriff Dispatch Transmit*
+- **107.9 MHz**: *Phantom Station Zero Numbers Transmission*
+
+#### Setup & API Configuration:
+Voice narration uses **ElevenLabs** only when an API key is provided via environment variables or a `.env` file:
+```bash
+# In your .env file or terminal:
+$env:ELEVENLABS_API_KEY = "your-elevenlabs-api-key"
+
+# (Optional) Custom Voice ID Overrides:
+$env:ELEVENLABS_VOICE_88_1 = "21m00Tcm4TlvDq8ikWAM"   # Rachel (Weather)
+$env:ELEVENLABS_VOICE_91_7 = "ErXwobaYiN019PkySvjV"   # Antoni (Civil Defense)
+$env:ELEVENLABS_VOICE_103_4 = "VR6AewLTigWG4xSOukaG"  # Arnold (Police Dispatch)
+$env:ELEVENLABS_VOICE_107_9 = "AZnzlk1XvdvUeBnXmlld"  # Domi (Station Zero)
+```
+
+#### Privacy & Resilience:
+- **No Hardcoded Keys**: API keys are strictly read from environment variables; keys are never logged, printed, or exposed in client bundles.
+- **Local Disk Cache**: Audio is automatically cached to `assets/audio/narration/station_{freq}.mp3` upon first fetch, eliminating redundant network calls and quota waste.
+- **Graceful Standby Fallback**: If `ELEVENLABS_API_KEY` is not set or network is offline, the game automatically falls back to procedural station audio signatures and pure text without interrupting gameplay.
+- **Independent & Optional**: Voice narration is completely optional and can be triggered on demand using the CRT monitor's narration button.
+
+### 3. Receiver Acoustic Console & Volume Controls
+Located directly in the tuning console:
+- **Speaker Power Switch**: Master toggle (`SPEAKER POWER (AUDIO ON)` / `MUTED`). Defaults to muted to respect modern browser autoplay policies.
+- **Master Volume Slider**: Global output scaling from 0% to 100%.
+- **RF Static & Ambience Slider**: Independent level control for background atmospheric noise and heterodynes.
+- **Voice Narration Slider**: Dedicated volume control for speech and station alert tones.
+- **Analog Detune Protection**: Turning the dial or losing carrier lock immediately mutes active voice narration, simulating realistic receiver behavior.
 
 ---
 

@@ -35,6 +35,34 @@ from ai_engine import (
     get_cached_ambient,
     synthesize_radio_signal,
 )
+from audio_manager import (
+    resolve_radio_audio_track,
+    get_elevenlabs_status,
+    check_elevenlabs_configured,
+    get_station_narration,
+)
+import os
+
+# Gracefully load environment variables from .env if present without hard requirement on python-dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # Pure Python zero-dependency fallback for loading .env files
+    _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.isfile(_env_path):
+        try:
+            with open(_env_path, "r", encoding="utf-8") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if _line and not _line.startswith("#") and "=" in _line:
+                        _k, _v = _line.split("=", 1)
+                        _k = _k.strip()
+                        _v = _v.strip().strip("'\"")
+                        if _k and _k not in os.environ:
+                            os.environ[_k] = _v
+        except Exception:
+            pass
 
 # -------------------------------------------------------------------
 # Streamlit Page Setup
@@ -540,6 +568,39 @@ st.html(
             font-size: 2.8rem;
         }
     }
+
+    /* Receiver Acoustic Console */
+    .audio-console-card {
+        background: #080d0a;
+        border: 1px solid #1c2b20;
+        border-radius: 6px;
+        padding: 10px 14px;
+        margin-top: 14px;
+        margin-bottom: 8px;
+    }
+
+    .audio-track-label {
+        background: #040805;
+        border: 1px dashed #1c2b20;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 0.75rem;
+        color: #8c9b91;
+        margin: 6px 0 8px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        letter-spacing: 1px;
+    }
+
+    /* Style Streamlit audio player to match vintage CRT phosphors */
+    audio {
+        filter: invert(1) hue-rotate(85deg) contrast(1.15);
+        border-radius: 4px;
+        height: 38px;
+        width: 100%;
+        margin-top: 2px;
+    }
     </style>
     """
 )
@@ -551,6 +612,15 @@ if "game_state" not in st.session_state:
     st.session_state.game_state = get_initial_state()
 
 state = st.session_state.game_state
+
+# Audio system state defaults
+state.setdefault("audio_enabled", False)  # Starts muted to prevent unexpected autoplay
+state.setdefault("master_volume", 0.70)
+state.setdefault("ambience_volume", 0.60)
+state.setdefault("voice_volume", 0.85)
+state.setdefault("carrier_lock_event", False)
+state.setdefault("playing_narration", False)
+state.setdefault("previous_tuner_freq", float(state.get("active_frequency", 80.0)))
 
 # -------------------------------------------------------------------
 # UI: Header Banner
@@ -617,7 +687,14 @@ with col_tuner:
     if locked_freq is not None and abs(tuner_freq - locked_freq) > 0.1:
         state["is_locked"] = False
         state["locked_frequency"] = None
+        state["playing_narration"] = False  # Immediately stop broadcast narration on detune
         state["lock_feedback"] = "Carrier lock lost due to frequency drift."
+
+    # If dial moved at all, stop active broadcast narration
+    prev_freq = state.get("previous_tuner_freq")
+    if prev_freq is not None and abs(tuner_freq - prev_freq) >= 0.1:
+        state["playing_narration"] = False
+    state["previous_tuner_freq"] = tuner_freq
 
     state["active_frequency"] = tuner_freq
 
@@ -693,6 +770,8 @@ with col_tuner:
             state["is_locked"] = True
             state["locked_frequency"] = target
             state["active_frequency"] = target
+            state["carrier_lock_event"] = True  # Triggers 0.8s carrier lock confirmation chime
+            state["playing_narration"] = False
             
             # Resolve locked broadcast and award clue (Strict Story Protection: 100% Python-Controlled)
             locked_data = resolve_frequency_telemetry(target, is_locked=True, locked_freq=target)
@@ -784,6 +863,125 @@ with col_tuner:
             </div>
             """
         )
+
+    # -------------------------------------------------------------
+    # Receiver Acoustic Console & Audio Controls
+    # -------------------------------------------------------------
+    el_telemetry = get_elevenlabs_status()
+    is_el_conf = el_telemetry["configured"]
+
+    st.html(
+        """
+        <div class="audio-console-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <span style="font-size: 0.90rem; font-weight: bold; color: #ffb703; letter-spacing: 1.5px;">
+                    🔊 RECEIVER ACOUSTIC MONITOR
+                </span>
+            </div>
+        </div>
+        """
+    )
+
+    # Master Speaker Power Switch (Mute / Unmute)
+    is_spk_live = state.get("audio_enabled", False)
+    col_spk1, col_spk2 = st.columns([1.6, 1])
+    with col_spk1:
+        spk_toggle = st.toggle(
+            "SPEAKER POWER (AUDIO ON)",
+            value=is_spk_live,
+            help="Master audio switch. When enabled, atmospheric static, heterodynes, lock tones, and narration are audible.",
+        )
+        state["audio_enabled"] = spk_toggle
+
+    with col_spk2:
+        if spk_toggle:
+            st.markdown(
+                '<div style="text-align: right; color: #39ff14; font-size: 0.78rem; font-weight: bold; padding-top: 8px;">'
+                '● LIVE SPEAKER</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div style="text-align: right; color: #8c9b91; font-size: 0.78rem; font-style: italic; padding-top: 8px;">'
+                '○ MUTED</div>',
+                unsafe_allow_html=True,
+            )
+
+    if spk_toggle:
+        with st.expander("🎚️ ACOUSTIC MIXER & NARRATION LEVELS", expanded=False):
+            m_vol = st.slider(
+                "Master Speaker Volume",
+                min_value=0,
+                max_value=100,
+                value=int(state.get("master_volume", 0.70) * 100),
+                step=5,
+                format="%d%%",
+            )
+            state["master_volume"] = m_vol / 100.0
+
+            col_sub1, col_sub2 = st.columns(2)
+            with col_sub1:
+                a_vol = st.slider(
+                    "RF Static & Ambience",
+                    min_value=0,
+                    max_value=100,
+                    value=int(state.get("ambience_volume", 0.60) * 100),
+                    step=5,
+                    format="%d%%",
+                )
+                state["ambience_volume"] = a_vol / 100.0
+            with col_sub2:
+                v_vol = st.slider(
+                    "Voice Narration",
+                    min_value=0,
+                    max_value=100,
+                    value=int(state.get("voice_volume", 0.85) * 100),
+                    step=5,
+                    format="%d%%",
+                )
+                state["voice_volume"] = v_vol / 100.0
+
+            if is_el_conf:
+                st.markdown(
+                    '<div style="font-size: 0.75rem; color: #39ff14; margin-top: 4px;">'
+                    '● ELEVENLABS AI VOICE: <strong>ACTIVE</strong> (API KEY CONFIGURED)</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div style="font-size: 0.75rem; color: #ffb703; margin-top: 4px;">'
+                    '○ ELEVENLABS AI VOICE: <strong>STANDBY</strong> (PROCEDURAL RADIO BEACON ACTIVE)</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # Resolve active audio track for current state
+        active_track = resolve_radio_audio_track(
+            telemetry=live_telemetry,
+            is_carrier_lock_event=state.get("carrier_lock_event", False),
+            is_playing_narration=state.get("playing_narration", False),
+            master_volume=state.get("master_volume", 0.70),
+            ambience_volume=state.get("ambience_volume", 0.60),
+            voice_volume=state.get("voice_volume", 0.85),
+        )
+
+        # Reset one-shot lock event so subsequent renders transition to stable carrier hum
+        if state.get("carrier_lock_event"):
+            state["carrier_lock_event"] = False
+
+        if active_track and active_track.get("audio_bytes"):
+            st.html(
+                f"""
+                <div class="audio-track-label">
+                    <span>AUDIO MONITOR:</span> <strong style="color: #39ff14;">{html.escape(active_track['label'])}</strong>
+                </div>
+                """
+            )
+            st.audio(
+                active_track["audio_bytes"],
+                format=active_track["format"],
+                autoplay=True,
+                loop=active_track["loop"],
+            )
 
 # ---------------------------------------------------------
 # Column 2: CRT Monitor, Mystery Synthesis & Clue Notebook
@@ -878,6 +1076,32 @@ with col_monitor:
             </div>
             """
         )
+
+        # Station Voice Narration Controller (Active on locked canonical stations)
+        if live_telemetry["is_locked"]:
+            is_playing_narr = state.get("playing_narration", False)
+            narr_btn_label = "⏹️ STOP BROADCAST NARRATION" if is_playing_narr else "🎙️ PLAY BROADCAST NARRATION"
+
+            col_nar1, col_nar2 = st.columns([1.6, 1])
+            with col_nar1:
+                if st.button(narr_btn_label, use_container_width=True):
+                    state["playing_narration"] = not is_playing_narr
+                    if state["playing_narration"]:
+                        state["audio_enabled"] = True  # Automatically unmutes so the player hears it
+                    st.rerun()
+            with col_nar2:
+                if is_el_conf:
+                    st.markdown(
+                        '<div style="font-size: 0.75rem; color: #39ff14; padding-top: 10px;">'
+                        '● ELEVENLABS AI VOICE LIVE</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        '<div style="font-size: 0.75rem; color: #ffb703; padding-top: 10px;">'
+                        '○ PROCEDURAL RADIO AUDIO LIVE</div>',
+                        unsafe_allow_html=True,
+                    )
 
         # -------------------------------------------------
         # Mystery Synthesis Module (Appears when all 4 clues are unlocked)
