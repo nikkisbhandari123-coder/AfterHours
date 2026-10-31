@@ -100,10 +100,10 @@ RADIO_STATIONS: Dict[float, Dict[str, Any]] = {
         "station_key": "truth",
         "description": "A buried high-frequency shortwave carrier emitting a melodic music box chime and encrypted numbers cipher.",
         "transmission": (
-            "...[Music box chime: 4 slow notes]... Four... nineteen... eighty-eight... zero... [heavy electromagnetic pulse]... "
-            "Emergency override authenticated. The valley floodgates were not breached by storm surge. The manual release valves "
-            "were engaged from inside the central control room. Blackwood was drowned intentionally to bury whatever was unearthed "
-            "beneath Blackwood Ridge. Repeat: Four... nineteen... eighty-eight... zero... [chime fades into abyssal static]..."
+            "...[Music box chime: 4 slow notes]... Cipher sequence: 4-19-88-0 (Four... nineteen... eighty-eight... zero)... "
+            "[heavy electromagnetic pulse]... Emergency override authenticated. The valley floodgates were not breached by storm surge. "
+            "The manual release valves were engaged from inside the central control room. Blackwood was drowned intentionally to bury "
+            "whatever was unearthed beneath Blackwood Ridge. Repeat cipher: 4-19-88-0... [chime fades into abyssal static]..."
         ),
         "distorted_fragment": (
             "...[faint music box chime buried in static]... [CARRIER BLEED FROM CARRIER-ZERO 107.9] ...'...four... "

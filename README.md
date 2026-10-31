@@ -86,15 +86,21 @@ Open your browser at `http://localhost:8501`.
 
 ---
 
-## 🔮 Known Frequencies & Mystery Clues
+## 🔮 Mystery: "The Disappearance of Blackwood"
 
-| Frequency | Callsign | Description | Clue Uncovered |
+Explore four interconnected frequencies that gradually unravel what truly happened the night the valley town of Blackwood was submerged:
+
+| Frequency | Callsign | Narrative Role & Contradictions | Evidence Intercepted |
 |---|---|---|---|
-| **88.1 MHz** | K-MIST 88.1 | Automated mountain weather bulletin | Unnatural barometric plunge & lantern lights |
-| **91.7 MHz** | CD-ALERT 91.7 | Civil defense evacuation siren | Sector 4-9 evacuation & blackout orders |
-| **103.4 MHz** | SHERIFF-DISP 103.4 | Police dispatch from October 1984 | Abandoned cars on Route 9 trestle bridge |
-| **107.9 MHz** | CARRIER-ZERO 107.9 | Hidden clandestine numbers station | Cipher 4-19-88-0 & intentional floodgate breach |
+| **88.1 MHz** | K-MIST 88.1 | **The Cover Story**: Claims Route 9 trestle is closed due to a natural mudslide, but notes an unnatural 22mb pressure plunge and moving lantern lights in the trees. | Anomaly on Blackwood Ridge & initial bridge closure claim |
+| **91.7 MHz** | CD-ALERT 91.7 | **The Contradiction**: Civil Defense declares a mandatory evacuation for sectors 4–9, but reveals the Route 9 trestle was cordoned by armed units in chemical gear—not closed by mudslides. | Contradiction: Armed military cordon at the bridge |
+| **103.4 MHz** | SHERIFF-DISP 103.4 | **The Cover-Up**: Police find civilian cars abandoned with headlights blazing; dispatch admits the Mayor's office pre-drafted the evacuation hours before any dam or flood warning was sounded. | Authorities pre-planned the evacuation hours in advance |
+| **107.9 MHz** | CARRIER-ZERO 107.9 | **The Truth**: Encrypted cipher `4-19-88-0` reveals that the valley floodgates were deliberately opened from inside the control room to drown Blackwood and bury the anomaly. | Valley floodgates were intentionally breached |
 
+### ⚖️ The Final Decision & Branching Endings
+Once all four key broadcasts are authenticated, the **Case Synthesis** module activates, offering two distinct endings:
+- **Ending A: "The Transmission of Truth"** — Broadcast the recordings across all county repeaters, dismantling the 40-year lie, while drawing the attention of an unlisted monitoring frequency.
+- **Ending B: "The Blackwood Quarantine"** — Degauss and erase the tapes, deciding that whatever was awakened on Blackwood Ridge is safer left drowned beneath sixty feet of reservoir water.
 ---
 
 ## 🤝 Contributing & License
