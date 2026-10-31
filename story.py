@@ -1,11 +1,11 @@
 """
-story.py - Narrative, Signal Telemetry & Frequency Database for AfterHours
+story.py - Narrative, Signal Telemetry & Story Progression for AfterHours
 
 Manages:
-- The 4 known mystery radio stations (88.1, 91.7, 103.4, 107.9 MHz)
-- Dynamic proximity-based signal strength detection across 80.0 - 110.0 MHz
-- Distorted fragment spillover on fringe frequencies
-- Clandestine carrier locking rules
+- The 4 connected mystery transmissions for "The Disappearance of Blackwood"
+- Proximity-based dynamic signal detection across 80.0 - 110.0 MHz
+- Investigation synthesis, contradictions, and mystery completion logic
+- Two branching narrative conclusions (Broadcast Truth vs. Enforce Quarantine)
 - Persistent clue notebook state with duplicate prevention
 """
 
@@ -15,83 +15,150 @@ import math
 import html
 
 # -------------------------------------------------------------------
-# Known Radio Stations (80.0 to 110.0 MHz)
+# Mystery Metadata
+# -------------------------------------------------------------------
+MYSTERY_TITLE = "The Disappearance of Blackwood"
+REQUIRED_MYSTERY_FREQUENCIES: List[float] = [88.1, 91.7, 103.4, 107.9]
+
+# -------------------------------------------------------------------
+# The 4 Connected Radio Stations ("The Disappearance of Blackwood")
 # -------------------------------------------------------------------
 RADIO_STATIONS: Dict[float, Dict[str, Any]] = {
     88.1: {
         "name": "Blackwood Weather Broadcast (K-MIST Automated)",
         "callsign": "K-MIST 88.1",
         "category": "Weather Alert",
+        "station_key": "weather",
         "description": "Continuous automated barometric updates and mountain civil weather warnings.",
         "transmission": (
-            "[Automated Weather Beacon] ...Blackwood valley weather bulletin at 02:40 AM. "
-            "Barometric pressure plunging rapidly over the mountain pass. Dense, unclassified freezing fog "
-            "is descending into the lower basin. All motorists are advised that Blackwood Ridge roads are impassable. "
-            "Do not stop for flickering lantern lights along the tree line..."
+            "[Synthesized Weather Tone] ...Blackwood Valley automated weather bulletin at 02:40 AM. "
+            "Unprecedented barometric plunge detected over Blackwood Ridge, dropping 22 millibars in ten minutes. "
+            "Dense freezing fog containing unclassified particulate is engulfing the lowlands. All motorists "
+            "are advised that the Route 9 trestle bridge is closed due to localized mudslides. "
+            "Do not stop for flickering lantern lights in the tree line..."
         ),
         "distorted_fragment": (
             "...*kzz-hiss*... [CARRIER BLEED FROM K-MIST 88.1] ...'...barometric pressure plunging... "
-            "freezing fog descending... do not stop for lantern lights...'... *static wave washes over signal*..."
+            "freezing fog engulfing lowlands... Route 9 trestle closed due to mudslides... lantern lights in tree line...'... *static wash*..."
         ),
-        "clue": "Weather alert reports an unnatural barometric plunge and strange lantern lights along Blackwood Ridge.",
+        "clue": (
+            "Weather beacon claims the Route 9 trestle bridge was closed by natural mudslides, "
+            "while reporting anomalous barometric drops and strange lantern lights along Blackwood Ridge."
+        ),
         "base_strength": 94,
     },
     91.7: {
         "name": "Civil Defense Emergency Transmission",
         "callsign": "CD-ALERT 91.7",
         "category": "Emergency Broadcast",
+        "station_key": "defense",
         "description": "Echoing civil alert siren and looping emergency broadcast protocol.",
         "transmission": (
-            "[Civil Defense Siren Loop] ...Emergency transmission priority one. "
-            "Evacuation order remains in effect for sectors four through nine. Municipal water contamination "
-            "unconfirmed. Stay indoors, extinguish all exterior illumination, and do not open doors for "
-            "unverified emergency personnel wearing gas masks..."
+            "[Civil Defense Klaxon Loop] ...Emergency transmission priority one. Evacuation order is mandatory "
+            "for sectors four through nine due to unconfirmed water reservoir contamination. Residents are instructed "
+            "to extinguish all exterior illumination and seal ventilation ducts. Do not attempt to evacuate via the Route 9 "
+            "trestle bridge—the bridge has been cordoned by military personnel in chemical protective gear. "
+            "Do not approach the perimeter..."
         ),
         "distorted_fragment": (
-            "...*wailing siren bleed*... [CARRIER BLEED FROM CD-ALERT 91.7] ...'...emergency transmission... "
-            "evacuation order for sectors four through nine... extinguish all exterior lights...'... *heavy electrical whine*..."
+            "...*wailing siren bleed*... [CARRIER BLEED FROM CD-ALERT 91.7] ...'...evacuation mandatory for sectors four "
+            "through nine... extinguish all lights... Route 9 trestle cordoned by military units in chemical gear...'... *electrical whine*..."
         ),
-        "clue": "Civil Defense issued a high-priority evacuation order for sectors 4 through 9 with orders to black out all lights.",
+        "clue": (
+            "Civil Defense contradicts the weather service: the Route 9 trestle was cordoned by armed military units "
+            "in chemical gear, not closed by a natural mudslide."
+        ),
         "base_strength": 90,
     },
     103.4: {
         "name": "Blackwood County Police Transmission",
         "callsign": "SHERIFF-DISP 103.4",
         "category": "Police Dispatch Archive",
+        "station_key": "police",
         "description": "Crackling analog police radio repeater playback from the night of October 19, 1984.",
         "transmission": (
-            "...*kzzzt*... Dispatch to Unit 6, respond to the old trestle bridge on Route 9. "
-            "We have multiple 911 calls reporting abandoned civilian vehicles with doors standing open and headlights on. "
-            "Checkpoint Bravo is not responding to radio hails... repeat, Checkpoint Bravo is completely dark... *heavy static burst*..."
+            "...*kzzzt*... Dispatch to Unit 6, respond to the Route 9 trestle bridge immediately. "
+            "We have multiple 911 calls reporting six civilian vehicles abandoned on the bridge approach with driver "
+            "doors standing open and headlights blazing. Checkpoint Bravo has completely gone dark. Dispatch note: "
+            "the Mayor's office drafted this evacuation order at 11:00 PM last night—hours before any siren or reservoir "
+            "warning sounded. They knew what was coming... *heavy RF burst*..."
         ),
         "distorted_fragment": (
-            "...*crackling radio flutter*... [CARRIER BLEED FROM SHERIFF-DISP 103.4] ...'...Dispatch to Unit 6... "
-            "abandoned civilian vehicles near trestle bridge... Checkpoint Bravo is dark...'... *burst of heavy RF static*..."
+            "...*crackling radio flutter*... [CARRIER BLEED FROM SHERIFF-DISP 103.4] ...'...six civilian vehicles abandoned "
+            "with headlights blazing... Checkpoint Bravo is dark... Mayor drafted evacuation hours before sirens sounded...'... *burst of static*..."
         ),
-        "clue": "Sheriff dispatch confirms abandoned civilian cars with headlights on near the Route 9 trestle bridge.",
+        "clue": (
+            "Sheriff dispatch confirms civilian cars were abandoned with headlights on near the bridge, and proves "
+            "the Mayor's office drafted the evacuation order hours before any official flood alert was issued."
+        ),
         "base_strength": 86,
     },
     107.9: {
         "name": "Mysterious Hidden Transmission (Phantom Station Zero)",
         "callsign": "CARRIER-ZERO 107.9",
         "category": "Clandestine Numbers Station",
+        "station_key": "truth",
         "description": "A buried high-frequency shortwave carrier emitting a melodic music box chime and encrypted numbers cipher.",
         "transmission": (
-            "...[Music box chime: 4 slow notes]... Four... nineteen... eighty-eight... zero... "
-            "[heavy electromagnetic pulse]... 'The floodgates were opened from inside the control room'... "
-            "repeat: Four... nineteen... eighty-eight... zero... [chime fades into abyssal static]..."
+            "...[Music box chime: 4 slow notes]... Four... nineteen... eighty-eight... zero... [heavy electromagnetic pulse]... "
+            "Emergency override authenticated. The valley floodgates were not breached by storm surge. The manual release valves "
+            "were engaged from inside the central control room. Blackwood was drowned intentionally to bury whatever was unearthed "
+            "beneath Blackwood Ridge. Repeat: Four... nineteen... eighty-eight... zero... [chime fades into abyssal static]..."
         ),
         "distorted_fragment": (
             "...[faint music box chime buried in static]... [CARRIER BLEED FROM CARRIER-ZERO 107.9] ...'...four... "
-            "nineteen... eighty-eight... floodgates were opened...'... *pulse tone drops into silence*..."
+            "nineteen... eighty-eight... zero... floodgates were opened from inside the control room...'... *pulse tone drops*..."
         ),
-        "clue": "Hidden cipher 4-19-88-0 confirms the valley floodgates were deliberately opened from inside the control room.",
+        "clue": (
+            "Clandestine cipher 4-19-88-0 exposes the ultimate truth: the valley floodgates were deliberately opened "
+            "from inside the control room to drown Blackwood and bury whatever was unearthed beneath Blackwood Ridge."
+        ),
         "base_strength": 80,
     },
 }
 
 KNOWN_FREQUENCIES: List[float] = sorted(list(RADIO_STATIONS.keys()))
 SUPPORTED_FREQUENCIES: List[float] = KNOWN_FREQUENCIES
+
+# -------------------------------------------------------------------
+# Two Branching Endings
+# -------------------------------------------------------------------
+ENDINGS: Dict[str, Dict[str, str]] = {
+    "truth": {
+        "title": "THE TRANSMISSION OF TRUTH",
+        "subtitle": "The Silence of Blackwood is Shattered",
+        "badge": "ENDING A // THE BROADCAST",
+        "theme_color": "#39ff14",
+        "narrative": (
+            "You route the auxiliary emergency transmitter switch directly into the hilltop repeater tower. "
+            "The vacuum tubes flare blinding amber as the full shortwave circuit engages.\n\n"
+            "Across the dark mountain valley, the static clears on every radio dial from 80.0 to 110.0 MHz. "
+            "The weather contradictions, the sheriff's recordings, and the clandestine control room confession "
+            "replay simultaneously across Blackwood County.\n\n"
+            "The official forty-year lie of a 'tragic natural flash flood' is shattered forever. The families of the "
+            "missing finally know why the doors were locked and why the floodgates opened.\n\n"
+            "As the truth loops endlessly into the night sky, your signal meter suddenly pegs at 100%. "
+            "An unlisted high-power frequency clicks on: 'We have your antenna coordinates. Stand by your receiver.'"
+        ),
+    },
+    "quarantine": {
+        "title": "THE BLACKWOOD QUARANTINE",
+        "subtitle": "The Valley Remains Asleep",
+        "badge": "ENDING B // THE CONCEALMENT",
+        "theme_color": "#ffb703",
+        "narrative": (
+            "Your finger rests on the emergency broadcast switch... but you hesitate. You look through the cracked "
+            "studio window toward Blackwood Ridge. The thick, unnatural fog moves against the wind, dense with unclassified particulate.\n\n"
+            "Whatever was unearthed beneath the mountain in 1984 wasn't meant to be discovered. The flooding of the valley "
+            "was a desperate quarantine to bury it beneath sixty feet of reservoir water.\n\n"
+            "You engage the degaussing circuit. High-voltage magnetic pulses sweep through the tape heads, erasing every recorded "
+            "transmission and numbers cipher into permanent white noise.\n\n"
+            "The analog needle drops back to 80.0 MHz dead air. The secret of Blackwood remains drowned in silence, protected from "
+            "those who might venture into the fog to dig it up again.\n\n"
+            "You power down the Allied Shortwave console and walk out into the quiet night."
+        ),
+    },
+}
 
 # Procedural static and eerie interference samples for dead air frequencies
 ATMOSPHERIC_STATIC_SAMPLES: List[Dict[str, str]] = [
@@ -129,15 +196,6 @@ def resolve_frequency_telemetry(
 ) -> Dict[str, Any]:
     """
     Evaluate signal detection, carrier proximity, dynamic strength, and decoded transmission.
-    
-    Args:
-        freq: Active position of the dial slider (80.0 to 110.0 MHz)
-        is_locked: Whether the receiver currently holds a carrier lock
-        locked_freq: The frequency that was locked
-        
-    Returns:
-        Dict containing signal telemetry, status label, strength bars/percent,
-        transmission content, and clue availability.
     """
     freq = round(freq, 1)
 
@@ -153,27 +211,20 @@ def resolve_frequency_telemetry(
     closest_station = RADIO_STATIONS[closest_station_freq]
     is_within_lock_range = (min_dist <= 0.1)
 
-    # -------------------------------------------------------------
     # 1. Dynamic Signal Strength Calculation
-    # -------------------------------------------------------------
-    # Strength ramps up smoothly as player approaches an active frequency
     if min_dist <= 0.1:
-        # At or right beside the carrier peak: 85% to 94%
         signal_percent = int(closest_station["base_strength"] - (min_dist * 40))
     elif min_dist <= 0.4:
-        # Near carrier (distorted bleed zone): 45% to 75%
-        ratio = (0.4 - min_dist) / 0.3  # 0.0 to 1.0
+        ratio = (0.4 - min_dist) / 0.3
         signal_percent = int(45 + ratio * 30)
     elif min_dist <= 0.8:
-        # Faint carrier detection zone: 18% to 40%
-        ratio = (0.8 - min_dist) / 0.4  # 0.0 to 1.0
+        ratio = (0.8 - min_dist) / 0.4
         signal_percent = int(18 + ratio * 22)
     else:
-        # Dead air / static noise: 5% to 12%
         seed = int(freq * 10)
         signal_percent = max(5, int(abs(math.sin(seed * 0.7)) * 12))
 
-    # Signal bars (0 to 5)
+    # Signal bars
     if signal_percent >= 82:
         signal_bars = 5
         signal_label = "STRONG (CARRIER PEAK)"
@@ -190,9 +241,7 @@ def resolve_frequency_telemetry(
         signal_bars = 1
         signal_label = "DEAD AIR (STATIC)"
 
-    # -------------------------------------------------------------
     # 2. Transmission & Status Logic
-    # -------------------------------------------------------------
     # Case A: Carrier Locked at this frequency
     if is_locked and locked_freq is not None and abs(freq - locked_freq) <= 0.1:
         return {
@@ -288,13 +337,14 @@ def get_station_data(frequency: float) -> Dict[str, Any]:
 def get_initial_state() -> Dict[str, Any]:
     """Provide the default state for a new exploration session."""
     initial_time = datetime.now().strftime("%I:%M:%S %p")
-    default_freq = 80.0  # Start at beginning of spectrum for manual exploration
+    default_freq = 80.0
 
     return {
         "active_frequency": default_freq,
         "locked_frequency": None,
         "is_locked": False,
         "lock_feedback": None,
+        "chosen_ending": None,
         "discovered_clues": [
             {
                 "id": "init-01",
@@ -311,14 +361,10 @@ def add_clue_to_state(state: Dict[str, Any], clue_text: str, source_freq: str) -
     """
     Add a discovered clue to the notebook if not already present.
     Guarantees no duplicate clues are recorded.
-    
-    Returns:
-        True if a new clue was added, False if it was already known.
     """
     if not clue_text:
         return False
     
-    # Check for existing clue text to strictly prevent duplicates
     for existing in state["discovered_clues"]:
         if existing["text"] == clue_text:
             return False
@@ -332,9 +378,45 @@ def add_clue_to_state(state: Dict[str, Any], clue_text: str, source_freq: str) -
         "is_new": True,
     }
     
-    # Mark older clues as not new
     for c in state["discovered_clues"]:
         c["is_new"] = False
 
     state["discovered_clues"].append(new_entry)
     return True
+
+
+def get_discovered_frequencies(state: Dict[str, Any]) -> List[float]:
+    """Return a list of mystery frequencies that have been decoded and logged."""
+    found = []
+    for clue in state.get("discovered_clues", []):
+        freq_str = clue.get("frequency", "")
+        for target in REQUIRED_MYSTERY_FREQUENCIES:
+            if f"{target:.1f}" in freq_str:
+                if target not in found:
+                    found.append(target)
+    return sorted(found)
+
+
+def check_investigation_complete(state: Dict[str, Any]) -> bool:
+    """Check if all 4 mystery frequencies have been unlocked and documented."""
+    found = get_discovered_frequencies(state)
+    return len(found) >= len(REQUIRED_MYSTERY_FREQUENCIES)
+
+
+def get_mystery_progress(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Retrieve narrative progress telemetry for the mystery."""
+    found = get_discovered_frequencies(state)
+    return {
+        "total_required": len(REQUIRED_MYSTERY_FREQUENCIES),
+        "total_discovered": len(found),
+        "discovered_frequencies": found,
+        "is_complete": len(found) >= len(REQUIRED_MYSTERY_FREQUENCIES),
+    }
+
+
+def record_player_decision(state: Dict[str, Any], decision_key: str) -> bool:
+    """Record player's final decision for the ending."""
+    if decision_key in ENDINGS:
+        state["chosen_ending"] = decision_key
+        return True
+    return False

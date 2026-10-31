@@ -9,6 +9,8 @@ Implements:
 - Dynamic signal detection: signal strength ramps up as player approaches active transmissions
 - Fringe frequencies produce distorted transmission fragments and static
 - Functional Tune/Lock button that stabilizes and reveals full broadcasts and awards clues
+- "The Disappearance of Blackwood" connected mystery progression
+- Case Synthesis decision module with two distinct endings (Broadcast Truth vs. Enforce Quarantine)
 - Unified and visually consistent Investigation Evidence Notebook with source frequencies and timestamps
 """
 
@@ -16,11 +18,17 @@ import streamlit as st
 import html
 from datetime import datetime
 from story import (
+    MYSTERY_TITLE,
+    REQUIRED_MYSTERY_FREQUENCIES,
     RADIO_STATIONS,
     KNOWN_FREQUENCIES,
+    ENDINGS,
     resolve_frequency_telemetry,
     get_initial_state,
     add_clue_to_state,
+    check_investigation_complete,
+    get_mystery_progress,
+    record_player_decision,
 )
 
 # -------------------------------------------------------------------
@@ -89,7 +97,7 @@ st.html(
         margin-top: 8px;
     }
 
-    /* Receiver Status Telemetry Bar (Replaces empty panel) */
+    /* Receiver Status Telemetry Bar */
     .receiver-status-bar {
         background: #080d0a;
         border: 1px solid #1c2b20;
@@ -330,6 +338,88 @@ st.html(
         letter-spacing: 0.5px;
     }
 
+    /* Case Resolution Synthesis Banner */
+    .case-synthesis-banner {
+        background: linear-gradient(180deg, #182217 0%, #0d160f 100%);
+        border: 2px solid #ffb703;
+        border-radius: 8px;
+        padding: 18px 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 0 15px rgba(255, 183, 3, 0.2);
+    }
+
+    .synthesis-badge {
+        display: inline-block;
+        background: #ffb703;
+        color: #070a08;
+        font-size: 0.72rem;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 3px;
+        letter-spacing: 1.5px;
+        margin-bottom: 8px;
+    }
+
+    .synthesis-title {
+        color: #ffb703;
+        font-size: 1.3rem;
+        margin: 4px 0 10px 0;
+        letter-spacing: 1px;
+    }
+
+    .synthesis-desc {
+        color: #c5d6cb;
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-bottom: 10px;
+    }
+
+    /* Ending Terminal */
+    .ending-terminal {
+        background-color: #040805;
+        border: 2px solid #233728;
+        border-radius: 8px;
+        padding: 24px;
+        position: relative;
+        box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.95), 0 0 20px rgba(0, 255, 100, 0.08);
+        margin-bottom: 20px;
+    }
+
+    .ending-badge {
+        display: inline-block;
+        font-size: 0.75rem;
+        padding: 3px 10px;
+        border-radius: 3px;
+        letter-spacing: 2px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+
+    .ending-title {
+        font-family: 'VT323', monospace;
+        font-size: 2.8rem;
+        margin: 4px 0;
+        letter-spacing: 4px;
+        line-height: 1.1;
+    }
+
+    .ending-subtitle {
+        font-size: 1.05rem;
+        color: #8c9b91;
+        font-style: italic;
+        margin-bottom: 16px;
+        border-bottom: 1px dashed #1c2b20;
+        padding-bottom: 10px;
+    }
+
+    .ending-text {
+        font-family: 'Space Mono', 'Courier New', monospace;
+        font-size: 1.02rem;
+        line-height: 1.75;
+        color: #d1ded4;
+        white-space: pre-wrap;
+    }
+
     /* Evidence Log Panel */
     .evidence-panel {
         background: linear-gradient(180deg, #0e1711 0%, #080e0a 100%);
@@ -479,7 +569,6 @@ col_tuner, col_monitor = st.columns([1, 1.4], gap="large")
 # Column 1: Continuous Analog Tuner Console
 # ---------------------------------------------------------
 with col_tuner:
-    # 2. Receiver Status Component (Shows active system health)
     st.html(
         """
         <div class="receiver-status-bar">
@@ -498,7 +587,7 @@ with col_tuner:
     st.subheader("🎛️ ANALOG TUNING CAPACITOR")
     st.caption("Rotate the tuning capacitor dial across the shortwave band.")
 
-    # 1. Continuous Draggable Tuner from 80.0 to 110.0 MHz, step 0.1
+    # Continuous Draggable Tuner from 80.0 to 110.0 MHz, step 0.1
     current_slider_val = float(state.get("active_frequency", 80.0))
     tuner_freq = st.slider(
         "Frequency Tuning Dial (MHz)",
@@ -573,7 +662,7 @@ with col_tuner:
         """
     )
 
-    # 4. Tune / Lock Button Logic
+    # Tune / Lock Button Logic
     if is_currently_locked:
         lock_button_label = f"🔒 LOCKED ON {tuner_freq:.1f} MHz"
     elif live_telemetry["can_lock"]:
@@ -610,7 +699,7 @@ with col_tuner:
             state["lock_feedback"] = f"○ Lock failed: No stable carrier at {tuner_freq:.1f} MHz. Only static noise."
         st.rerun()
 
-    # Dynamic Signal Strength Indicator (Proximity-based falloff)
+    # Dynamic Signal Strength Indicator
     sig_bars = live_telemetry["signal_bars"]
     sig_pct = live_telemetry["signal_percent"]
     sig_lbl = live_telemetry["signal_label"]
@@ -647,59 +736,131 @@ with col_tuner:
         )
 
 # ---------------------------------------------------------
-# Column 2: CRT Transmission Screen & Clue Notebook
+# Column 2: CRT Monitor, Mystery Synthesis & Clue Notebook
 # ---------------------------------------------------------
 with col_monitor:
-    escaped_transmission = html.escape(live_telemetry["transmission"])
-    current_time_str = datetime.now().strftime("%I:%M:%S %p")
+    chosen_ending_key = state.get("chosen_ending")
 
-    # Monitor header color
-    if live_telemetry["is_locked"]:
-        rec_color = "#39ff14"
-        rec_text = "● LOCKED"
-    elif live_telemetry["can_lock"]:
-        rec_color = "#ffb703"
-        rec_text = "◉ CARRIER DETECTED"
+    # -----------------------------------------------------
+    # BRANCH A: Player has reached a narrative ending
+    # -----------------------------------------------------
+    if chosen_ending_key and chosen_ending_key in ENDINGS:
+        ending = ENDINGS[chosen_ending_key]
+        ending_color = ending.get("theme_color", "#39ff14")
+        escaped_ending_narrative = html.escape(ending["narrative"])
+
+        st.html(
+            f"""
+            <div class="ending-terminal" style="border-color: {ending_color};">
+                <span class="ending-badge" style="background: {ending_color}; color: #040805;">
+                    {html.escape(ending['badge'])}
+                </span>
+                <h2 class="ending-title" style="color: {ending_color};">
+                    {html.escape(ending['title'])}
+                </h2>
+                <div class="ending-subtitle">
+                    {html.escape(ending['subtitle'])}
+                </div>
+                <div class="ending-text">{escaped_ending_narrative}</div>
+            </div>
+            """
+        )
+
+        if st.button("↺ RE-OPEN CASE INVESTIGATION (EXPLORE ALTERNATE CHOICE)", use_container_width=True):
+            state["chosen_ending"] = None
+            st.rerun()
+
+    # -----------------------------------------------------
+    # BRANCH B: Active gameplay exploration & mystery progress
+    # -----------------------------------------------------
     else:
-        rec_color = "#6a7c70"
-        rec_text = "○ SEARCHING"
+        escaped_transmission = html.escape(live_telemetry["transmission"])
+        current_time_str = datetime.now().strftime("%I:%M:%S %p")
 
-    st.html(
-        f"""
-        <div class="crt-monitor">
-            <div class="crt-header-bar">
-                <div>
-                    <span style="color: {rec_color}; font-weight: bold; margin-right: 8px;">{rec_text}</span>
-                    <span style="color: #6a7c70;">[{current_time_str}]</span>
+        # Monitor header color
+        if live_telemetry["is_locked"]:
+            rec_color = "#39ff14"
+            rec_text = "● LOCKED"
+        elif live_telemetry["can_lock"]:
+            rec_color = "#ffb703"
+            rec_text = "◉ CARRIER DETECTED"
+        else:
+            rec_color = "#6a7c70"
+            rec_text = "○ SEARCHING"
+
+        st.html(
+            f"""
+            <div class="crt-monitor">
+                <div class="crt-header-bar">
+                    <div>
+                        <span style="color: {rec_color}; font-weight: bold; margin-right: 8px;">{rec_text}</span>
+                        <span style="color: #6a7c70;">[{current_time_str}]</span>
+                    </div>
+                    <div class="crt-category">{html.escape(live_telemetry['category'].upper())}</div>
                 </div>
-                <div class="crt-category">{html.escape(live_telemetry['category'].upper())}</div>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; align-items: baseline;">
-                <h3 class="crt-callsign">{html.escape(live_telemetry['callsign'])}</h3>
-                <div style="color: #39ff14; font-size: 0.85rem; letter-spacing: 1px;">
-                    {tuner_freq:.1f} MHz
+                
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <h3 class="crt-callsign">{html.escape(live_telemetry['callsign'])}</h3>
+                    <div style="color: #39ff14; font-size: 0.85rem; letter-spacing: 1px;">
+                        {tuner_freq:.1f} MHz
+                    </div>
                 </div>
-            </div>
-            
-            <div style="color: #8c9b91; font-size: 0.9rem; margin-top: 4px;">
-                {html.escape(live_telemetry['station_name'])}
-            </div>
-            <div style="color: #5c6c61; font-size: 0.82rem; margin-top: 2px;">
-                {html.escape(live_telemetry['description'])}
-            </div>
+                
+                <div style="color: #8c9b91; font-size: 0.9rem; margin-top: 4px;">
+                    {html.escape(live_telemetry['station_name'])}
+                </div>
+                <div style="color: #5c6c61; font-size: 0.82rem; margin-top: 2px;">
+                    {html.escape(live_telemetry['description'])}
+                </div>
 
-            <div style="font-size: 0.78rem; color: #ffb703; margin-top: 16px; letter-spacing: 1.5px;">
-                AUDIO DECODER TRANSCRIPT:
+                <div style="font-size: 0.78rem; color: #ffb703; margin-top: 16px; letter-spacing: 1.5px;">
+                    AUDIO DECODER TRANSCRIPT:
+                </div>
+                <div class="crt-text-body">{escaped_transmission}<span class="terminal-cursor"></span></div>
             </div>
-            <div class="crt-text-body">{escaped_transmission}<span class="terminal-cursor"></span></div>
-        </div>
-        """
-    )
+            """
+        )
 
-    # 5. Investigation Evidence Notebook (Rendered as unified styled cards)
+        # -------------------------------------------------
+        # Mystery Synthesis Module (Appears when all 4 clues are unlocked)
+        # -------------------------------------------------
+        is_investigation_complete = check_investigation_complete(state)
+
+        if is_investigation_complete:
+            st.html(
+                """
+                <div class="case-synthesis-banner">
+                    <span class="synthesis-badge">⚠️ CASE SYNTHESIS UNLOCKED</span>
+                    <h3 class="synthesis-title">THE DISAPPEARANCE OF BLACKWOOD: RESOLUTION</h3>
+                    <div class="synthesis-desc">
+                        All four mystery transmissions have been intercepted and authenticated.<br><br>
+                        • <strong>88.1 MHz (Weather)</strong>: Claimed a natural mudslide closed the Route 9 bridge while noting anomalous atmospheric ionization and lantern lights.<br>
+                        • <strong>91.7 MHz (Civil Defense)</strong>: Contradicted the weather report, ordering an evacuation and cordoning the bridge with armed chemical units.<br>
+                        • <strong>103.4 MHz (Police)</strong>: Proved civilian cars were abandoned at the bridge and revealed the Mayor pre-drafted the evacuation order hours ahead of time.<br>
+                        • <strong>107.9 MHz (Station Zero)</strong>: Clandestine cipher 4-19-88-0 confirmed the valley floodgates were deliberately opened from the inside to drown Blackwood and bury the discovery.<br><br>
+                        You hold the only shortwave transmitter coupled to the county emergency repeaters.
+                        What is your decision?
+                    </div>
+                </div>
+                """
+            )
+
+            col_choice1, col_choice2 = st.columns(2)
+            with col_choice1:
+                if st.button("📢 BROADCAST THE TRUTH\n(OVERRIDE REPEATERS)", use_container_width=True):
+                    record_player_decision(state, "truth")
+                    st.rerun()
+            with col_choice2:
+                if st.button("🔒 ENFORCE QUARANTINE\n(DEGAUSS & ERASE TAPES)", use_container_width=True):
+                    record_player_decision(state, "quarantine")
+                    st.rerun()
+
+    # -----------------------------------------------------
+    # Investigation Evidence Notebook (Rendered as unified styled cards)
+    # -----------------------------------------------------
     clues_list = state.get("discovered_clues", [])
     cards_html_list = []
+    mystery_prog = get_mystery_progress(state)
 
     if clues_list:
         # Render cards in reverse chronological order (newest first)
@@ -732,15 +893,29 @@ with col_monitor:
             'No clues uncovered yet. Sweep the frequency dial to intercept broadcasts.</div>'
         )
 
+    # Progress badge label
+    if mystery_prog["is_complete"]:
+        progress_label = '<span style="color: #ffb703; font-weight: bold;">CASE READY FOR RESOLUTION</span>'
+    else:
+        progress_label = (
+            f"PROGRESS: <strong style='color: #39ff14;'>"
+            f"{mystery_prog['total_discovered']} / {mystery_prog['total_required']}</strong> KEY SIGNALS DECODED"
+        )
+
     st.html(
         f"""
         <div class="evidence-panel">
             <div class="evidence-header">
-                <h3 style="margin: 0; color: #ffb703; font-size: 1.15rem; letter-spacing: 1px;">
-                    🗂️ INVESTIGATION EVIDENCE LOG
-                </h3>
+                <div>
+                    <h3 style="margin: 0; color: #ffb703; font-size: 1.15rem; letter-spacing: 1px;">
+                        🗂️ INVESTIGATION EVIDENCE LOG
+                    </h3>
+                    <div style="font-size: 0.78rem; color: #8c9b91; margin-top: 2px;">
+                        MYSTERY: <em>"{html.escape(MYSTERY_TITLE)}"</em>
+                    </div>
+                </div>
                 <span style="font-size: 0.82rem; color: #8c9b91;">
-                    EVIDENCE COUNT: <strong style="color: #39ff14;">{len(clues_list)}</strong>
+                    {progress_label}
                 </span>
             </div>
             <div class="clues-container">
