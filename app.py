@@ -30,6 +30,11 @@ from story import (
     get_mystery_progress,
     record_player_decision,
 )
+from ai_engine import (
+    check_ollama_service,
+    get_cached_ambient,
+    synthesize_radio_signal,
+)
 
 # -------------------------------------------------------------------
 # Streamlit Page Setup
@@ -569,8 +574,14 @@ col_tuner, col_monitor = st.columns([1, 1.4], gap="large")
 # Column 1: Continuous Analog Tuner Console
 # ---------------------------------------------------------
 with col_tuner:
+    ollama_status = check_ollama_service()
+    ai_available = ollama_status.get("available", False)
+    ai_model_name = ollama_status.get("model") or "STANDBY"
+    ai_label = f"GEMMA (LOCAL: {ai_model_name})" if ai_available else "STANDBY (FALLBACK)"
+    ai_color = "#39ff14" if ai_available else "#8c9b91"
+
     st.html(
-        """
+        f"""
         <div class="receiver-status-bar">
             <div>
                 <span class="status-indicator-light">●</span>
@@ -579,7 +590,7 @@ with col_tuner:
             <span class="status-divider">|</span>
             <div>BAND: <strong>FM SHORTWAVE</strong></div>
             <span class="status-divider">|</span>
-            <div>TUBES: <strong>WARMED (6.3V)</strong></div>
+            <div>AI: <strong style="color: {ai_color};">{html.escape(ai_label)}</strong></div>
         </div>
         """
     )
@@ -610,11 +621,15 @@ with col_tuner:
 
     state["active_frequency"] = tuner_freq
 
-    # Calculate telemetry for active dial position
+    # Calculate telemetry for active dial position with cached AI lookup
+    clues_count = len(state.get("discovered_clues", []))
+    cached_ai = get_cached_ambient(tuner_freq, clues_count)
     live_telemetry = resolve_frequency_telemetry(
         freq=tuner_freq,
         is_locked=state.get("is_locked", False),
         locked_freq=state.get("locked_frequency"),
+        clues_count=clues_count,
+        cached_ai_snippet=cached_ai,
     )
     is_currently_locked = live_telemetry["is_locked"]
 
@@ -679,7 +694,7 @@ with col_tuner:
             state["locked_frequency"] = target
             state["active_frequency"] = target
             
-            # Resolve locked broadcast and award clue
+            # Resolve locked broadcast and award clue (Strict Story Protection: 100% Python-Controlled)
             locked_data = resolve_frequency_telemetry(target, is_locked=True, locked_freq=target)
             if locked_data.get("clue"):
                 clue_added = add_clue_to_state(
@@ -696,8 +711,43 @@ with col_tuner:
         else:
             state["is_locked"] = False
             state["locked_frequency"] = None
-            state["lock_feedback"] = f"○ Lock failed: No stable carrier at {tuner_freq:.1f} MHz. Only static noise."
+            if ai_available:
+                with st.spinner(f"Intercepting atmospheric RF on {tuner_freq:.1f} MHz with Gemma AI..."):
+                    target_f = live_telemetry.get("target_freq")
+                    synth_res = synthesize_radio_signal(
+                        frequency=tuner_freq,
+                        status_category=live_telemetry["status"],
+                        clues_count=clues_count,
+                        nearest_station=RADIO_STATIONS.get(target_f) if target_f else None,
+                        dist_to_station=abs(tuner_freq - (target_f or 999.0)),
+                        force_generate=True,
+                    )
+                    if synth_res.get("source") == "GEMMA_AI":
+                        state["lock_feedback"] = f"● Atmospheric anomaly intercepted at {tuner_freq:.1f} MHz via local Gemma AI."
+                    else:
+                        state["lock_feedback"] = f"○ No stable carrier at {tuner_freq:.1f} MHz. Only static noise."
+            else:
+                state["lock_feedback"] = f"○ Lock failed: No stable carrier at {tuner_freq:.1f} MHz. Only static noise."
         st.rerun()
+
+    # Dedicated On-Demand AI Intercept button for dead air & fringe frequencies
+    if not is_currently_locked and ai_available and not live_telemetry["can_lock"]:
+        if st.button("⚡ INTERCEPT SIGNAL WITH GEMMA AI", use_container_width=True):
+            with st.spinner(f"Intercepting shortwave anomaly at {tuner_freq:.1f} MHz with Gemma AI..."):
+                target_f = live_telemetry.get("target_freq")
+                synth_res = synthesize_radio_signal(
+                    frequency=tuner_freq,
+                    status_category=live_telemetry["status"],
+                    clues_count=clues_count,
+                    nearest_station=RADIO_STATIONS.get(target_f) if target_f else None,
+                    dist_to_station=abs(tuner_freq - (target_f or 999.0)),
+                    force_generate=True,
+                )
+                if synth_res.get("source") == "GEMMA_AI":
+                    state["lock_feedback"] = f"● Gemma AI intercept decoded at {tuner_freq:.1f} MHz."
+                else:
+                    state["lock_feedback"] = f"○ Faint anomaly faded into magnetic tape hiss."
+            st.rerun()
 
     # Dynamic Signal Strength Indicator
     sig_bars = live_telemetry["signal_bars"]
@@ -777,16 +827,23 @@ with col_monitor:
         escaped_transmission = html.escape(live_telemetry["transmission"])
         current_time_str = datetime.now().strftime("%I:%M:%S %p")
 
-        # Monitor header color
+        # Monitor header color and authentication badge
         if live_telemetry["is_locked"]:
             rec_color = "#39ff14"
             rec_text = "● LOCKED"
+            tag_badge = '<span style="background: rgba(57, 255, 20, 0.15); border: 1px solid #39ff14; color: #39ff14; font-size: 0.68rem; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; margin-left: 8px;">CANONICAL BROADCAST</span>'
         elif live_telemetry["can_lock"]:
             rec_color = "#ffb703"
             rec_text = "◉ CARRIER DETECTED"
+            tag_badge = '<span style="background: rgba(255, 183, 3, 0.15); border: 1px solid #ffb703; color: #ffd166; font-size: 0.68rem; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; margin-left: 8px;">CARRIER PHASE LOCKED</span>'
+        elif live_telemetry.get("is_ai_generated"):
+            rec_color = "#39ff14"
+            rec_text = "◐ AI INTERCEPT"
+            tag_badge = '<span style="background: rgba(57, 255, 20, 0.18); border: 1px solid #39ff14; color: #39ff14; font-size: 0.68rem; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; margin-left: 8px;">GEMMA AI SYNTHESIZED</span>'
         else:
             rec_color = "#6a7c70"
             rec_text = "○ SEARCHING"
+            tag_badge = '<span style="background: rgba(140, 155, 145, 0.12); border: 1px solid #2a3a2e; color: #8c9b91; font-size: 0.68rem; padding: 2px 6px; border-radius: 3px; letter-spacing: 1px; margin-left: 8px;">BACKGROUND RF STATIC</span>'
 
         st.html(
             f"""
@@ -795,6 +852,7 @@ with col_monitor:
                     <div>
                         <span style="color: {rec_color}; font-weight: bold; margin-right: 8px;">{rec_text}</span>
                         <span style="color: #6a7c70;">[{current_time_str}]</span>
+                        {tag_badge}
                     </div>
                     <div class="crt-category">{html.escape(live_telemetry['category'].upper())}</div>
                 </div>

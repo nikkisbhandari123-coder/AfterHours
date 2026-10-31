@@ -193,9 +193,13 @@ def resolve_frequency_telemetry(
     freq: float,
     is_locked: bool = False,
     locked_freq: Optional[float] = None,
+    clues_count: int = 0,
+    cached_ai_snippet: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Evaluate signal detection, carrier proximity, dynamic strength, and decoded transmission.
+    Canonical mystery broadcasts on 88.1, 91.7, 103.4, and 107.9 are strictly protected and
+    never overwritten by AI-generated content.
     """
     freq = round(freq, 1)
 
@@ -242,7 +246,7 @@ def resolve_frequency_telemetry(
         signal_label = "DEAD AIR (STATIC)"
 
     # 2. Transmission & Status Logic
-    # Case A: Carrier Locked at this frequency
+    # Case A: Carrier Locked at this frequency (Strict Story Protection: 100% Python-Controlled)
     if is_locked and locked_freq is not None and abs(freq - locked_freq) <= 0.1:
         return {
             "is_locked": True,
@@ -260,6 +264,7 @@ def resolve_frequency_telemetry(
             "transmission": closest_station["transmission"],
             "clue": closest_station["clue"],
             "source_freq": f"{closest_station_freq:.1f} MHz",
+            "is_ai_generated": False,
         }
 
     # Case B: Close enough to lock, but not locked yet (Within 0.1 MHz)
@@ -284,10 +289,13 @@ def resolve_frequency_telemetry(
             ),
             "clue": None,
             "source_freq": None,
+            "is_ai_generated": False,
         }
 
     # Case C: Nearby frequency (0.1 < min_dist <= 0.4 MHz) - Distorted fragments bleed through
     elif min_dist <= 0.4:
+        transmission_content = cached_ai_snippet if cached_ai_snippet else closest_station["distorted_fragment"]
+        is_ai = bool(cached_ai_snippet and "[GEMMA AI INTERCEPT]" in cached_ai_snippet)
         return {
             "is_locked": False,
             "can_lock": False,
@@ -301,15 +309,18 @@ def resolve_frequency_telemetry(
             "signal_bars": signal_bars,
             "signal_label": signal_label,
             "description": f"RF carrier wave bleeding through from neighboring frequency {closest_station_freq:.1f} MHz.",
-            "transmission": closest_station["distorted_fragment"],
+            "transmission": transmission_content,
             "clue": None,
             "source_freq": None,
+            "is_ai_generated": is_ai,
         }
 
     # Case D: Dead air / Unknown frequency (min_dist > 0.4 MHz)
     else:
         seed = int(freq * 10)
         sample = ATMOSPHERIC_STATIC_SAMPLES[seed % len(ATMOSPHERIC_STATIC_SAMPLES)]
+        transmission_content = cached_ai_snippet if cached_ai_snippet else sample["text"]
+        is_ai = bool(cached_ai_snippet and "[GEMMA AI INTERCEPT]" in cached_ai_snippet)
         return {
             "is_locked": False,
             "can_lock": False,
@@ -318,14 +329,15 @@ def resolve_frequency_telemetry(
             "status_label": "○ NO CARRIER / DEAD AIR",
             "station_name": f"Dead Air ({freq:.1f} MHz)",
             "callsign": "RF NOISE",
-            "category": sample["type"],
+            "category": "AI Intercept" if is_ai else sample["type"],
             "signal_percent": signal_percent,
             "signal_bars": signal_bars,
             "signal_label": signal_label,
             "description": "No recognized commercial or emergency carrier detected. Atmospheric hiss and background RF noise.",
-            "transmission": sample["text"],
+            "transmission": transmission_content,
             "clue": None,
             "source_freq": None,
+            "is_ai_generated": is_ai,
         }
 
 

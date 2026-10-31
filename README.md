@@ -38,15 +38,55 @@ AfterHours/
    - Dynamic frequency resolution (`resolve_frequency_telemetry`): calculates distance falloff, signal bleeding/interference near known channels, and procedural static/voice fragments on dead air.
    - Clue state management with persistent tracking, timestamping, and source frequency attribution.
 
-3. **[ai_engine.py](file:///c:/Users/nikki/AfterHours/ai_engine.py) (AI Transmission Engine)**:
-   - Modular engine designed to handle conversational personas and dynamic responses.
-   - Ready for plug-and-play connection to LLM APIs (e.g., Google Gemini, OpenAI, Claude).
+3. **[ai_engine.py](file:///c:/Users/nikki/AfterHours/ai_engine.py) (Local Gemma AI Radio Engine)**:
+   - Integrates local **Gemma** models using **Ollama**'s HTTP API (`http://localhost:11434`).
+   - Automatically detects installed local Gemma models (e.g., `gemma3:4b`).
+   - Generates four types of atmospheric content:
+     1. Atmospheric radio static and vacuum tube interference.
+     2. Distorted voice fragments bleeding over near active stations.
+     3. Short mysterious phantom background transmissions.
+     4. Contextual ambient messages based on tuned frequency and discovered clues.
+   - **Strict Story Protection**: All 4 canonical mystery broadcasts, clues, frequency locks, and branching endings are 100% Python-controlled and can never be altered or overwritten by AI.
+   - **Zero-Freeze Caching**: Slider sweeping remains instant (0ms) using in-memory response caching and instant deterministic Python audio fallbacks if Ollama is offline or times out.
 
 4. **[requirements.txt](file:///c:/Users/nikki/AfterHours/requirements.txt)**:
-   - Defines dependencies (`streamlit`, `python-dotenv`).
+   - Defines dependencies (`streamlit`, `python-dotenv`). No external heavyweight ML libraries required.
 
 5. **[.gitignore](file:///c:/Users/nikki/AfterHours/.gitignore)**:
-   - Excludes Python bytecode, virtual environments, and secrets from Git.
+   - Excludes Python bytecode, virtual environments, and scratch tests from Git.
+
+---
+
+## 🤖 Local Gemma AI (Ollama Integration)
+
+AfterHours integrates local Gemma AI via Ollama to synthesize eerie radio interference and contextual shortwave whispers without transmitting any data over the cloud.
+
+### 1. Requirements & Setup
+1. Ensure [Ollama](https://ollama.ai) is installed and running on your system:
+   ```bash
+   ollama list
+   ```
+2. Verify an installed Gemma model (e.g. `gemma3:4b`):
+   ```bash
+   ollama run gemma3:4b "echo"
+   ```
+3. Start the game — AfterHours will automatically detect the running Ollama daemon and the active Gemma model!
+
+### 2. Configuration Options (Environment Variables)
+You can configure the AI engine using environment variables in PowerShell or your `.env` file:
+```bash
+# Model selection (defaults to auto-detected local gemma3:4b)
+$env:OLLAMA_MODEL = "gemma3:4b"
+
+# Host address (defaults to http://localhost:11434)
+$env:OLLAMA_HOST = "http://localhost:11434"
+
+# Timeout in seconds before falling back to Python static (defaults to 25.0s)
+$env:OLLAMA_TIMEOUT = "25.0"
+```
+
+### 3. Graceful Offline Fallback
+If Ollama is not running or if a generation request times out, the game **continues to work seamlessly** using its built-in procedural Python radio audio synthesizer without freezing the interface. The receiver status bar displays `AI: STANDBY (FALLBACK)` and all canonical broadcasts remain 100% playable.
 
 ---
 
