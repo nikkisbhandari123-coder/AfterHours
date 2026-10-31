@@ -14,6 +14,8 @@ AfterHours/
 ├── story.py          # Narrative logic, frequency spectrum telemetry, lore & clues
 ├── ai_engine.py      # AI persona engine & radio transmission generator
 ├── audio_manager.py  # Atmospheric radio audio synthesizer & ElevenLabs voice narration
+├── assets/           # Audio sound effects, cached narration & title screen artwork
+│   └── afterhours_title.png  # Cinematic opening screen backdrop
 ├── requirements.txt  # Project dependencies (streamlit, python-dotenv)
 ├── README.md         # Documentation & guide
 └── .gitignore        # Git ignore rules for Python & Streamlit
@@ -22,6 +24,7 @@ AfterHours/
 ### 📄 Detailed File Descriptions
 
 1. **[app.py](file:///c:/Users/nikki/AfterHours/app.py) (Main Application)**:
+   - Fullscreen **Cinematic Opening Screen** featuring custom backdrop artwork (`assets/afterhours_title.png`), pixel-perfect responsive `START INVESTIGATION` button alignment, and sequential atmospheric telemetry transition (`SIGNAL DETECTED...` -> `CONNECTING TO BLACKWOOD FREQUENCY...` -> `INVESTIGATION INITIATED.`).
    - Streamlit frontend featuring an abandoned radio station aesthetic (deep black chassis, dark forest green panels, phosphor green text, and vintage amber warnings).
    - Continuous analog dial slider sweeping **80.0 to 110.0 MHz** (precision 0.1 MHz) with large digital readout.
    - Dedicated **Tune / Lock Signal** mechanism with manual dial sweeping for true station discovery.

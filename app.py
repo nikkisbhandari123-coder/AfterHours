@@ -42,6 +42,8 @@ from audio_manager import (
     get_station_narration,
 )
 import os
+import time
+import base64
 
 # Gracefully load environment variables from .env if present without hard requirement on python-dotenv
 try:
@@ -73,6 +75,337 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# -------------------------------------------------------------------
+# Cinematic Opening Screen Helpers & State
+# -------------------------------------------------------------------
+@st.cache_data
+def get_title_image_base64() -> str:
+    """Read and cache the title screen image as base64 string."""
+    img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "afterhours_title.png")
+    if os.path.isfile(img_path):
+        try:
+            with open(img_path, "rb") as f:
+                return base64.b64encode(f.read()).decode("utf-8")
+        except Exception:
+            return ""
+    return ""
+
+
+def run_atmospheric_transition(state: dict):
+    """Play sequential atmospheric transition telemetry before entering radio console."""
+    transition_placeholder = st.empty()
+
+    stages = [
+        ("SIGNAL DETECTED...", 0.85, "#ffb703", 35),
+        ("CONNECTING TO BLACKWOOD FREQUENCY...", 0.95, "#ffd166", 75),
+        ("INVESTIGATION INITIATED.", 0.95, "#39ff14", 100),
+    ]
+
+    for msg, delay, color, pct in stages:
+        transition_placeholder.html(
+            f"""
+            <style>
+            @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+            @keyframes crt-flicker {{
+                0% {{ opacity: 0.96; }}
+                50% {{ opacity: 1; }}
+                100% {{ opacity: 0.98; }}
+            }}
+            @keyframes text-glow {{
+                0% {{ text-shadow: 0 0 8px {color}88; }}
+                50% {{ text-shadow: 0 0 25px {color}, 0 0 45px {color}aa; }}
+                100% {{ text-shadow: 0 0 8px {color}88; }}
+            }}
+
+            .trans-container {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                background-color: #040605;
+                background-image: 
+                    radial-gradient(circle at 50% 50%, rgba(14, 28, 18, 0.75) 0%, rgba(3, 5, 4, 0.98) 85%);
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                z-index: 100000;
+                animation: crt-flicker 0.15s infinite;
+                font-family: 'Share Tech Mono', 'Courier New', monospace;
+            }}
+            .trans-box {{
+                width: 88%;
+                max-width: 680px;
+                background: rgba(6, 10, 8, 0.92);
+                border: 1px solid #1c2b20;
+                border-radius: 8px;
+                padding: 40px 30px;
+                box-shadow: 0 0 40px rgba(0, 0, 0, 0.95), 0 0 25px rgba(28, 43, 32, 0.4);
+                text-align: center;
+                position: relative;
+            }}
+            .trans-header {{
+                font-size: 0.78rem;
+                letter-spacing: 3px;
+                color: #8c9b91;
+                margin-bottom: 24px;
+                border-bottom: 1px dashed #1c2b20;
+                padding-bottom: 8px;
+            }}
+            .trans-main {{
+                font-size: 1.85rem;
+                font-weight: bold;
+                letter-spacing: 4px;
+                color: {color};
+                margin: 20px 0;
+                animation: text-glow 1s infinite alternate;
+            }}
+            .trans-sub {{
+                font-size: 0.85rem;
+                letter-spacing: 2px;
+                color: #526657;
+                margin-top: 15px;
+            }}
+            .trans-meter {{
+                margin-top: 25px;
+                height: 6px;
+                width: 100%;
+                background: #0d1610;
+                border-radius: 3px;
+                overflow: hidden;
+            }}
+            .trans-bar {{
+                height: 100%;
+                width: {pct}%;
+                background: linear-gradient(90deg, #1c3b24, {color});
+                transition: width 0.3s ease;
+            }}
+            .trans-scanlines {{
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+                background-size: 100% 4px;
+                pointer-events: none;
+                opacity: 0.35;
+                border-radius: 8px;
+            }}
+            </style>
+
+            <div class="trans-container">
+                <div class="trans-box">
+                    <div class="trans-scanlines"></div>
+                    <div class="trans-header">MODEL AR-1978 SHORTWAVE RECEIVER TELEMETRY</div>
+                    <div class="trans-main">{html.escape(msg)}</div>
+                    <div class="trans-sub">CARRIER FREQUENCY LOCK IN PROGRESS // BLACKWOOD VALLEY</div>
+                    <div class="trans-meter">
+                        <div class="trans-bar"></div>
+                    </div>
+                </div>
+            </div>
+            """
+        )
+        time.sleep(delay)
+
+    state["game_started"] = True
+    st.rerun()
+
+
+def render_title_screen(state: dict):
+    """Renders the cinematic title screen with pixel-perfect START INVESTIGATION overlay."""
+    b64_img = get_title_image_base64()
+    bg_rule = (
+        f"background-image: url('data:image/png;base64,{b64_img}') !important;"
+        if b64_img
+        else "background: radial-gradient(circle at 50% 50%, #15241b 0%, #060807 80%) !important;"
+    )
+
+    st.html(
+        f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+
+        /* Clean full viewport reset for opening screen */
+        header[data-testid="stHeader"] {{
+            display: none !important;
+        }}
+        [data-testid="stToolbar"] {{
+            display: none !important;
+        }}
+        #MainMenu, footer {{
+            visibility: hidden !important;
+            display: none !important;
+        }}
+        .main .block-container {{
+            max-width: 100vw !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+        }}
+        .stApp {{
+            background-color: #040605 !important;
+            {bg_rule}
+            background-size: cover !important;
+            background-position: center center !important;
+            background-repeat: no-repeat !important;
+            height: 100vh !important;
+            width: 100vw !important;
+            overflow: hidden !important;
+        }}
+
+        /* Subtle dark vignette overlay */
+        .title-screen-vignette {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0) 55%, rgba(2, 4, 3, 0.40) 100%);
+            pointer-events: none;
+            z-index: 10;
+        }}
+
+        /* Subtle CRT scanlines */
+        .title-screen-scanlines {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%);
+            background-size: 100% 4px;
+            opacity: 0.35;
+            pointer-events: none;
+            z-index: 11;
+        }}
+
+        /* Precision positioning of transparent Streamlit button overlay over the image's green button */
+        /* Native green button in 1672x941 artwork: X: [579, 1094], Y: [584, 670] */
+        @media (min-aspect-ratio: 1672/941) {{
+            /* Viewport is wider than image: image height = 100vw * 941 / 1672 */
+            body div[data-testid="stButton"],
+            body div.stButton {{
+                position: fixed !important;
+                top: calc(50vh - (50vw * 941 / 1672) + (100vw * 941 / 1672 * 0.6206)) !important;
+                left: 50vw !important;
+                transform: translateX(-50%) !important;
+                width: calc(100vw * 0.3080) !important;
+                height: calc(100vw * 941 / 1672 * 0.0914) !important;
+                z-index: 99999 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+        }}
+
+        @media (max-aspect-ratio: 1672/941) {{
+            /* Viewport is taller than image: image width = 100vh * 1672 / 941 */
+            body div[data-testid="stButton"],
+            body div.stButton {{
+                position: fixed !important;
+                top: 62.06vh !important;
+                left: 50vw !important;
+                transform: translateX(-50%) !important;
+                width: calc(100vh * 1672 / 941 * 0.3080) !important;
+                height: 9.14vh !important;
+                z-index: 99999 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+        }}
+
+        /* Completely transparent overlay: background, border, shadow and text are 100% invisible */
+        body div[data-testid="stButton"] button,
+        body div.stButton button {{
+            width: 100% !important;
+            height: 100% !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            border-color: transparent !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            color: transparent !important;
+            outline: none !important;
+            cursor: pointer !important;
+            opacity: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 12px !important;
+            -webkit-tap-highlight-color: transparent !important;
+        }}
+
+        body div[data-testid="stButton"] button *,
+        body div.stButton button * {{
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            color: transparent !important;
+        }}
+
+        body div[data-testid="stButton"] button:hover,
+        body div[data-testid="stButton"] button:active,
+        body div[data-testid="stButton"] button:focus,
+        body div.stButton button:hover,
+        body div.stButton button:active,
+        body div.stButton button:focus {{
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            border-color: transparent !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            color: transparent !important;
+            outline: none !important;
+            opacity: 0 !important;
+        }}
+        </style>
+
+        <div class="title-screen-vignette"></div>
+        <div class="title-screen-scanlines"></div>
+        """
+    )
+
+    clicked = st.button(
+        "START INVESTIGATION",
+        key="start_investigation_btn",
+    )
+
+    if clicked:
+        run_atmospheric_transition(state)
+        st.stop()
+
+
+# -------------------------------------------------------------------
+# State Management
+# -------------------------------------------------------------------
+if "game_state" not in st.session_state:
+    st.session_state.game_state = get_initial_state()
+
+state = st.session_state.game_state
+
+# Title screen state default (starts active for new sessions)
+state.setdefault("game_started", False)
+
+# Audio system state defaults
+state.setdefault("audio_enabled", False)  # Starts muted to prevent unexpected autoplay
+state.setdefault("master_volume", 0.70)
+state.setdefault("ambience_volume", 0.60)
+state.setdefault("voice_volume", 0.85)
+state.setdefault("carrier_lock_event", False)
+state.setdefault("playing_narration", False)
+state.setdefault("previous_tuner_freq", float(state.get("active_frequency", 80.0)))
+
+# -------------------------------------------------------------------
+# Cinematic Opening Screen Flow
+# -------------------------------------------------------------------
+if not state.get("game_started", False):
+    render_title_screen(state)
+    st.stop()
 
 # -------------------------------------------------------------------
 # Custom CSS: Vintage CRT, Forest Green Chassis & Atmospheric Design
@@ -604,23 +937,6 @@ st.html(
     </style>
     """
 )
-
-# -------------------------------------------------------------------
-# State Management
-# -------------------------------------------------------------------
-if "game_state" not in st.session_state:
-    st.session_state.game_state = get_initial_state()
-
-state = st.session_state.game_state
-
-# Audio system state defaults
-state.setdefault("audio_enabled", False)  # Starts muted to prevent unexpected autoplay
-state.setdefault("master_volume", 0.70)
-state.setdefault("ambience_volume", 0.60)
-state.setdefault("voice_volume", 0.85)
-state.setdefault("carrier_lock_event", False)
-state.setdefault("playing_narration", False)
-state.setdefault("previous_tuner_freq", float(state.get("active_frequency", 80.0)))
 
 # -------------------------------------------------------------------
 # UI: Header Banner
